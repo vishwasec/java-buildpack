@@ -20,6 +20,8 @@ require 'java_buildpack/jre'
 require 'java_buildpack/util/shell'
 require 'java_buildpack/util/qualify_path'
 require 'open3'
+require 'tmpdir'
+require 'zip'
 
 module JavaBuildpack
   module Jre
@@ -63,6 +65,27 @@ module JavaBuildpack
       end
 
       private
+
+      def app_classfiles_count
+        count_archive(@application, 0)
+      end
+
+      def count_archive(file, count)
+        Zip::File.open(file) do |zip_file|
+          zip_file.each do |entry|
+            if (entry.name.end_with?(".class") || entry.name.end_with?(".groovy"))
+              count = count + 1
+            end
+            if (entry.name.end_with?(".war") || entry.name.end_with?(".jar"))
+              Dir.mktmpdir do |dir|
+                entry.extract("#{dir}/archive")
+                count = count_archive("#{dir}/archive", count)
+              end
+            end
+          end
+        end
+        return count
+      end
 
       def memory_calculator
         @droplet.sandbox + "bin/java-buildpack-memory-calculator-#{@version}"
